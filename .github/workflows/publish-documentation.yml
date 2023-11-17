@@ -1,0 +1,47 @@
+name: Publish Medeo database documentation
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref_to_publish:
+        description: "Tag or Branch you wish to publish eg. v12.0.0 or releases/12.0.0"
+        required: true
+        default: ""
+
+concurrency:
+  group: "testing"
+  cancel-in-progress: true
+
+jobs:
+  generate-documentation:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: write
+      pages: write
+      packages: write
+      id-token: write
+      issues: write
+
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref_to_publish || github.ref }}
+          fetch-depth: 0
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v3    
+        with:
+          enablement: true
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v2
+        with:
+          # Upload entire repository
+          path: ./
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2 

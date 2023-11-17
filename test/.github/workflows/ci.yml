@@ -1,0 +1,66 @@
+name: Marrow CI Build
+on:
+  pull_request:
+    branches:
+    - "**"
+  push:
+    branches:
+    - master
+    - develop 
+    - "features/**"
+    - "releases/**"
+    - "candidates/**"
+    tags:
+    - "*"
+
+concurrency:
+  group: "marrow-ci-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  scheme:
+    name: Scheme Testing
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: qhrprdcrpss01ccacrdnucleus01.azurecr.io/qhrtech.com/medeo-florence/third-party/postgres:main
+        credentials:
+          username: ${{ secrets.ACR_AGENT_PULL_QHRPRDCRPSS01CCACRDNUCLEUS01_USERNAME }}
+          password: ${{ secrets.ACR_AGENT_PULL_QHRPRDCRPSS01CCACRDNUCLEUS01_PASSWORD }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: '0'
+          ssh-key: "${{ secrets.SSH_KEY_GITHUB }}"
+          submodules: true
+
+      - name: Configure Artifactory
+        uses: jfrog/setup-jfrog-cli@v3
+        env:
+          JF_ENV_1: ${{ secrets.ARTIFACTORY_CLI_CONFIG }}
+
+      - name: Setup Liquibase
+        run: |
+          LIQUIBASE_VERSION=$(cat liquibase.version)
+          mkdir liquibase
+          jfrog rt dl qhr-maven-thirdparty/com/qhrtech/medeo/medeo-marrow/liquibase/$LIQUIBASE_VERSION/liquibase-$LIQUIBASE_VERSION.tgz liquibase/ --flat
+          tar -zxf liquibase/liquibase-$LIQUIBASE_VERSION.tgz -C liquibase/
+      
+      - name: Scheme Status
+        run: |
+          DB_ENV=test LIQUIBASE_CMD=liquibase/liquibase script/liquibase-wrapper status
+
+      - name: Scheme Update
+        run: |
+          DB_ENV=test LIQUIBASE_CMD=liquibase/liquibase script/liquibase-wrapper update
